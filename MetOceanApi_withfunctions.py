@@ -18,7 +18,7 @@ class MetOceanAPI:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            logger.info(f"Error fetching data from {endpoint}: {e}")
+            logger.error(f"Error fetching data from {endpoint}: {e}")
             return None
 
 class BuoyDataProcessor:
@@ -33,10 +33,13 @@ class BuoyDataProcessor:
         latest_data = []
         for mmsi in mmsi_list:
             data = self.api.get_data(endpoint=endpoint_latest + str(mmsi))
-            # Some buoys will be offline for maintenance etc, so check there is latest data before trying to append
-            if data is not None:
+            # Some buoys will be offline for maintenance etc, ensure there is data & it's a dictionary
+            if data and isinstance(data, dict): 
                 latest_data.append(data)
-        return pd.DataFrame(latest_data)
+            else:
+                logger.warning(f"No valid data returned for MMSI {mmsi}")
+
+        return pd.DataFrame(latest_data) if latest_data else pd.DataFrame()
 
     def merge_data(self, buoys_df, latest_df):
         # Join the dataframes on mmsi (unique buoy id), use suffixes if there is an overlap
@@ -44,32 +47,36 @@ class BuoyDataProcessor:
 
     def clean_data(self, df, column, threshold=30.0):
         # Remove unrealistic values, have left default as 30 because this is currently only used for water temp
-        df_clean = df[df[str(column)] <= threshold]
-        return df_clean
+        # dreturn df[df[str(column)] <= threshold]
+        return df.loc[df[column] <= threshold] # removes rows where the value of specified column is above threshold
+        
 
     def plot_water_temp(self, df_clean):
         # Create a map centered around the average latitude and longitude
         map_center_lat = df_clean['latitude'].mean()
         map_center_lon = df_clean['longitude'].mean()
-        m = Basemap(projection='merc', llcrnrlat=50, urcrnrlat=57, llcrnrlon=-11, urcrnrlon=-5, lat_ts=51.5, resolution='i')
+        map = Basemap(projection='merc', llcrnrlat=50, urcrnrlat=57, llcrnrlon=-11, urcrnrlon=-5, lat_ts=51.5, resolution='i')
 
-        m.drawcoastlines()
-        m.drawcountries()
-        m.drawmapboundary(fill_color='lightblue')
-        m.fillcontinents(color='lightgreen', lake_color='lightblue')
-        m.drawparallels(range(50, 58, 1), labels=[1, 0, 0, 0])
-        m.drawmeridians(range(-11, -4, 1), labels=[0, 0, 0, 1])
+        map.drawcoastlines()
+        map.drawcountries()
+        map.drawmapboundary(fill_color='lightblue')
+        map.fillcontinents(color='lightgreen', lake_color='lightblue')
+        map.drawparallels(range(50, 58, 1), labels=[1, 0, 0, 0])
+        map.drawmeridians(range(-11, -4, 1), labels=[0, 0, 0, 1])
 
         # Convert latitude and longitude to map coordinates
-        x, y = m(df_clean['longitude'].values, df_clean['latitude'].values)
+        x, y = map(df_clean['longitude'].values, df_clean['latitude'].values)
 
         # Create scatter plot with actual temperature values
-        scatter = m.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, vmin=df_clean['waterTemperature_latest'].min(), vmax=df_clean['waterTemperature_latest'].max())
+        scatter = map.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, vmin=df_clean['waterTemperature_latest'].min(), vmax=df_clean['waterTemperature_latest'].max())
 
         # Add labels for each point
         for i, (xi, yi) in enumerate(zip(x, y)):
-            txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white')
-            txt.set_path_effects([path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()])
+            txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white',
+               bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', boxstyle='round,pad=0.3'))
+            #txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white')
+            #txt.set_path_effects([path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()])
+            
 
         # Add color bar
         cbar = plt.colorbar(scatter)
@@ -116,4 +123,5 @@ df_clean = processor.clean_data(df, 'waterTemperature_latest', 30.0)
 processor.plot_water_temp(df_clean)
 
 # Log Data
-logger.info(df_clean)
+logger.info(f"Final dataset has {df_clean.shape[0]} rows and {df_clean.shape[1]} columns.")
+logger.info("MetOcean Api requester completed successfully")
