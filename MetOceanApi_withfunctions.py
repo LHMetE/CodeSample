@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
+import numpy as np
 from mpl_toolkits.basemap import Basemap
 
 # Calls the CIL API to get buoy data
@@ -43,7 +44,7 @@ class BuoyDataProcessor:
 
     def merge_data(self, buoys_df, latest_df):
         # Join the dataframes on mmsi (unique buoy id), use suffixes if there is an overlap
-        return pd.merge(buoys_df, latest_df, on='mmsi', how='left', suffixes=('_site', '_latest'))
+        return pd.merge(buoys_df, latest_df, on='mmsi', how='left', suffixes=('_top', '_latest'))
 
     def clean_data(self, df, column, threshold=30.0):
         # Remove unrealistic values, have left default as 30 because this is currently only used for water temp
@@ -52,10 +53,12 @@ class BuoyDataProcessor:
         
 
     def plot_water_temp(self, df_clean):
-        # Create a map centered around the average latitude and longitude
-        map_center_lat = df_clean['latitude'].mean()
-        map_center_lon = df_clean['longitude'].mean()
-        map = Basemap(projection='merc', llcrnrlat=50, urcrnrlat=57, llcrnrlon=-11, urcrnrlon=-5, lat_ts=51.5, resolution='i')
+        # Get min and max lat/longitude, adding a margin of 1 degree 
+        min_lat, max_lat = df_clean['latitude'].min() - 1, df_clean['latitude'].max() + 1
+        min_lon, max_lon = df_clean['longitude'].min() - 1, df_clean['longitude'].max() + 1
+        
+        map = Basemap(projection='merc', llcrnrlat=min_lat, urcrnrlat=max_lat, 
+              llcrnrlon=min_lon, urcrnrlon=max_lon, resolution='i')
 
         map.drawcoastlines()
         map.drawcountries()
@@ -67,22 +70,26 @@ class BuoyDataProcessor:
         # Convert latitude and longitude to map coordinates
         x, y = map(df_clean['longitude'].values, df_clean['latitude'].values)
 
-        # Create scatter plot with actual temperature values
-        scatter = map.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, vmin=df_clean['waterTemperature_latest'].min(), vmax=df_clean['waterTemperature_latest'].max())
+        
+        temp_min = df_clean['waterTemperature_latest'].min()
+        temp_max = df_clean['waterTemperature_latest'].max()
 
-        # Add labels for each point
+        # Create scatter plot with actual temperature values
+        scatter = map.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, vmin=temp_min, vmax=temp_max)
+
+        # Add labels for each point, bbox to make them legible against the map
         for i, (xi, yi) in enumerate(zip(x, y)):
             txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white',
                bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', boxstyle='round,pad=0.3'))
-            #txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white')
-            #txt.set_path_effects([path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()])
+            txt.set_path_effects([path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()])
             
 
-        # Add color bar
+        # Add colour bar
         cbar = plt.colorbar(scatter)
         cbar.set_label('Water Temperature (°C)')
-        cbar.set_ticks([df_clean['waterTemperature_latest'].min(), df_clean['waterTemperature_latest'].max()])
-        cbar.set_ticklabels([f"{df_clean['waterTemperature_latest'].min():.1f} °C", f"{df_clean['waterTemperature_latest'].max():.1f} °C"])
+        tick_values = cbar.set_ticks(np.linspace(temp_min, temp_max, num=5)) # numpy to get evenly spaced ticks
+        cbar.set_ticks(tick_values)
+        cbar.set_ticklabels([f"{val:.1f} °C" for val in tick_values]) # ensures consistent formatting
 
         plt.title('Buoy Locations with Water Temperatures')
         plt.show()
@@ -100,6 +107,7 @@ endpoint_top = "metoceansitesensors/"
 endpoint_latest = "realtime/latest/"
 
 logger.info(f"Met Ocean Api - Starting\n Initializing API at: {base_api_url}")
+
 # Initialize API and Buoy Processor
 api = MetOceanAPI(base_url=base_api_url)
 processor = BuoyDataProcessor(api)
