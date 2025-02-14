@@ -49,13 +49,12 @@ class BuoyDataProcessor:
     def clean_data(self, df, column, threshold=30.0):
         # Remove unrealistic values, have left default as 30 because this is currently only used for water temp
         # dreturn df[df[str(column)] <= threshold]
-        return df.loc[df[column] <= threshold] # removes rows where the value of specified column is above threshold
-        
+        return df.loc[df[column] <= threshold] # removes rows where the value of specified column is above threshold        
 
     def plot_water_temp(self, df_clean):
-        # Get min and max lat/longitude, adding a margin of 1 degree 
-        min_lat, max_lat = df_clean['latitude'].min() - 1, df_clean['latitude'].max() + 1
-        min_lon, max_lon = df_clean['longitude'].min() - 1, df_clean['longitude'].max() + 1
+        # Get min and max lat/longitude, adding a margin of 2 degree 
+        min_lat, max_lat = df_clean['latitude'].min() - 2, df_clean['latitude'].max() + 2
+        min_lon, max_lon = df_clean['longitude'].min() - 2, df_clean['longitude'].max() + 2
         
         map = Basemap(projection='merc', llcrnrlat=min_lat, urcrnrlat=max_lat, 
               llcrnrlon=min_lon, urcrnrlon=max_lon, resolution='i')
@@ -75,21 +74,19 @@ class BuoyDataProcessor:
         temp_max = df_clean['waterTemperature_latest'].max()
 
         # Create scatter plot with actual temperature values
-        scatter = map.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, vmin=temp_min, vmax=temp_max)
+        scatter = map.scatter(x, y, c=df_clean['waterTemperature_latest'], cmap='plasma', s=100, edgecolors='black', vmin=temp_min, vmax=temp_max)
 
         # Add labels for each point, bbox to make them legible against the map
         for i, (xi, yi) in enumerate(zip(x, y)):
-            txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='right', color='white',
-               bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', boxstyle='round,pad=0.3'))
+            txt = plt.text(xi, yi, df_clean.iloc[i]['siteName'], fontsize=9, ha='center', va='top', color='white', 
+               bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', boxstyle='round,pad=0.05'))
             txt.set_path_effects([path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()])
             
 
         # Add colour bar
         cbar = plt.colorbar(scatter)
         cbar.set_label('Water Temperature (°C)')
-        tick_values = cbar.set_ticks(np.linspace(temp_min, temp_max, num=5)) # numpy to get evenly spaced ticks
-        cbar.set_ticks(tick_values)
-        cbar.set_ticklabels([f"{val:.1f} °C" for val in tick_values]) # ensures consistent formatting
+        cbar.set_ticks(np.linspace(temp_min, temp_max, num=5)) # numpy to get evenly spaced ticks
 
         plt.title('Buoy Locations with Water Temperatures')
         plt.show()
