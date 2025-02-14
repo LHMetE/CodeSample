@@ -18,7 +18,7 @@ class MetOceanAPI:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching data from {endpoint}: {e}")
+            logger.info(f"Error fetching data from {endpoint}: {e}")
             return None
 
 class BuoyDataProcessor:
@@ -84,7 +84,7 @@ class BuoyDataProcessor:
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-log_file_handler = logging.FileHandler('C:/Users/lhickey/Documents/Log/api_log.log')
+log_file_handler = logging.FileHandler('./api_log.log')
 log_file_handler.setFormatter(formatter)
 logger.addHandler(log_file_handler)
 
@@ -92,17 +92,21 @@ base_api_url = "https://cilpublic.cil.ie/metoceanapi/api/"
 endpoint_top = "metoceansitesensors/"
 endpoint_latest = "realtime/latest/"
 
+logger.info(f"Met Ocean Api - Starting\n Initializing API at: {base_api_url}")
 # Initialize API and Buoy Processor
 api = MetOceanAPI(base_url=base_api_url)
 processor = BuoyDataProcessor(api)
 
 # Fetch Data - Top level shows which buoys are available
 top_level_data = processor.get_top_level_data(endpoint_top)
+logger.info(f"Received list of {len(top_level_data)} mmsi's from: \n {endpoint_top}")
+
 # Latest data for each buoy is requestd using the mmsi's from top_level_data
 latest_data = processor.get_latest_data(top_level_data['mmsi'].tolist(), endpoint_latest)
 
 # Merge latest data for each buoy into the top level data to enrich it
 df = processor.merge_data(top_level_data, latest_data)
+logger.info(f"Top Level and Latest data merged successfully.")
 logger.info(df)
 
 # Clean Data - some buoys were reporting 50 degrees C, setting a threshold to filter that out
