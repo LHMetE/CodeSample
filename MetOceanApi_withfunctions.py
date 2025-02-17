@@ -48,11 +48,10 @@ class BuoyDataProcessor:
 
     def clean_data(self, df, column, threshold=30.0):
         # Remove unrealistic values, have left default as 30 because this is currently only used for water temp
-        # dreturn df[df[str(column)] <= threshold]
         return df.loc[df[column] <= threshold] # removes rows where the value of specified column is above threshold        
 
     def plot_water_temp(self, df_clean):
-        # Get min and max lat/longitude, adding a margin of 2 degree 
+        # Get min and max lat/longitude, adding a margin of 2 degrees 
         min_lat, max_lat = df_clean['latitude'].min() - 2, df_clean['latitude'].max() + 2
         min_lon, max_lon = df_clean['longitude'].min() - 2, df_clean['longitude'].max() + 2
         
